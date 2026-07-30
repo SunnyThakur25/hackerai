@@ -1,7 +1,7 @@
 # ============================================================================
 # Base Image
 # ============================================================================
-FROM kalinux/kali-rolling
+FROM kalilinux/kali-rolling
 
 # ============================================================================
 # Metadata Labels
@@ -31,10 +31,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 # ============================================================================
-# Stage 2: Install System Packages
+# Stage 2: Core System Packages
 # ============================================================================
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    \
     # -------------------------------------------
     # Essential Utilities
     # -------------------------------------------
@@ -48,6 +49,7 @@ RUN apt-get update && \
     tree \
     perl \
     sudo \
+    \
     # -------------------------------------------
     # Build Tools
     # -------------------------------------------
@@ -58,6 +60,7 @@ RUN apt-get update && \
     cmake \
     pkg-config \
     binutils \
+    \
     # -------------------------------------------
     # Python Stack
     # -------------------------------------------
@@ -71,6 +74,7 @@ RUN apt-get update && \
     libxslt1-dev \
     zlib1g-dev \
     libglib2.0-dev \
+    \
     # -------------------------------------------
     # Ruby Stack
     # -------------------------------------------
@@ -80,6 +84,7 @@ RUN apt-get update && \
     libio-socket-ssl-perl \
     libcrypt-ssleay-perl \
     libssl-dev \
+    \
     # -------------------------------------------
     # Network Utilities
     # -------------------------------------------
@@ -91,6 +96,7 @@ RUN apt-get update && \
     traceroute \
     netcat-traditional \
     tcpdump \
+    \
     # -------------------------------------------
     # Search & Text Tools
     # -------------------------------------------
@@ -98,6 +104,7 @@ RUN apt-get update && \
     vim \
     nano \
     less \
+    \
     # -------------------------------------------
     # Network Scanning & Enumeration
     # -------------------------------------------
@@ -106,18 +113,21 @@ RUN apt-get update && \
     nikto \
     whatweb \
     wafw00f \
+    \
     # -------------------------------------------
     # Web Vulnerability Scanners
     # -------------------------------------------
     sqlmap \
     wapiti \
     wpscan \
+    \
     # -------------------------------------------
     # DNS/Subdomain Enumeration
     # -------------------------------------------
     subfinder \
     dnsrecon \
     dnsenum \
+    \
     # -------------------------------------------
     # Web Fuzzing & Discovery
     # -------------------------------------------
@@ -125,6 +135,7 @@ RUN apt-get update && \
     arjun \
     gobuster \
     dirsearch \
+    \
     # -------------------------------------------
     # SMB/NetBIOS Tools
     # -------------------------------------------
@@ -133,66 +144,99 @@ RUN apt-get update && \
     nbtscan \
     python3-impacket \
     enum4linux \
+    \
     # -------------------------------------------
     # Network Discovery
     # -------------------------------------------
     hping3 \
     arp-scan \
+    \
     # -------------------------------------------
-    # Utilities
+    # General Utilities
     # -------------------------------------------
     socat \
     proxychains4 \
     seclists \
     hashid \
-    libimage-exiftool-perl \
     cewl \
+    \
     # -------------------------------------------
     # SSL/TLS Testing
     # -------------------------------------------
     testssl.sh \
+    \
     # -------------------------------------------
     # Web Crawling & Recon
     # -------------------------------------------
     gospider \
     nuclei \
+    \
     # -------------------------------------------
     # Authentication/Bruteforce
     # -------------------------------------------
     hydra \
+    \
     # -------------------------------------------
     # Programming Languages
     # -------------------------------------------
     golang \
     nodejs \
     npm \
+    \
     # -------------------------------------------
-    # Additional Tools
+    # Development & Terminal Tools
     # -------------------------------------------
     tmux \
     chromium \
     fonts-liberation \
-    # -------------------------------------------
-    # Forensics
-    # -------------------------------------------
-    binwalk \
-    foremost \
+    \
     # -------------------------------------------
     # Document Conversion
     # -------------------------------------------
     pandoc \
     poppler-utils \
+    \
     # -------------------------------------------
-    # Security Frameworks
+    # Web Application Security Scanner
     # -------------------------------------------
     zaproxy \
+    \
+    # -------------------------------------------
+    # Exploitation Framework
+    # -------------------------------------------
     metasploit-framework \
     msfpc \
+    \
+    # -------------------------------------------
+    # Reverse Engineering
+    # -------------------------------------------
+    radare2 \
+    cutter \
+    gdb \
+    ltrace \
+    strace \
+    upx-ucl \
+    \
+    # -------------------------------------------
+    # Digital Forensics
+    # -------------------------------------------
+    sleuthkit \
+    volatility3 \
+    bulk-extractor \
+    foremost \
+    scalpel \
+    dcfldd \
+    hashdeep \
+    tshark \
+    wireshark-common \
+    libimage-exiftool-perl \
+    \
+    # Cleanup
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 # ============================================================================
-# Stage 3: Fix WhatWeb Ruby Library Symlink
+# Stage 3: Fix WhatWeb Ruby Library Path
 # ============================================================================
 RUN set -eux; \
     if command -v whatweb >/dev/null 2>&1; then \
@@ -228,7 +272,7 @@ RUN echo 'export PATH=/home/user/.local/bin:/usr/local/go/bin:/home/user/go/bin:
     chmod 644 /etc/profile.d/00-hackerai-path.sh
 
 # ============================================================================
-# Stage 5: Install Python Packages
+# Stage 5: Python Packages
 # ============================================================================
 
 # Document generation packages
@@ -241,7 +285,14 @@ RUN pip3 install --break-system-packages --no-cache-dir \
     pypandoc \
     odfpy
 
+# Forensics packages (Volatility3 dependencies)
+RUN pip3 install --break-system-packages --no-cache-dir \
+    volatility3 \
+    pycryptodome \
+    capstone
+
 # Security-focused packages
+# Note: Install compatible rich version first to avoid conflicts with Kali's python3-rich
 RUN pip3 install --break-system-packages --no-cache-dir --ignore-installed 'rich<14,>=10' && \
     pip3 install --break-system-packages --no-cache-dir \
     requests \
@@ -252,7 +303,7 @@ RUN pip3 install --break-system-packages --no-cache-dir --ignore-installed 'rich
     pycryptodomex
 
 # ============================================================================
-# Stage 6: Install Git-based Security Tools
+# Stage 6: Git-based Security Tools
 # ============================================================================
 RUN set -eux; \
     # JWT analysis tool
@@ -267,23 +318,27 @@ RUN set -eux; \
     ln -sf /opt/gittools/Extractor/extractor.sh /usr/local/bin/gitextractor
 
 # ============================================================================
-# Stage 7: Install Binary Tools
+# Stage 7: Binary Downloads (Platform-aware)
 # ============================================================================
 RUN set -eux; \
     # TruffleHog - Secret scanning
     curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin; \
+    \
     # Trivy - Vulnerability scanner
     curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin; \
+    \
     # HTTPx - HTTP probing with architecture detection
     arch=$(uname -m); \
     case "$arch" in \
-        x86_64) platform="linux_amd64" ;; \
-        aarch64|arm64) platform="linux_arm64" ;; \
-        *) platform="linux_amd64" ;; \
+        x86_64)        platform="linux_amd64" ;; \
+        aarch64|arm64) platform="linux_arm64"  ;; \
+        *)             platform="linux_amd64"  ;; \
     esac; \
-    HTTPX_URL=$(curl -s https://api.github.com/repos/projectdiscovery/httpx/releases/latest | \
-        grep "browser_download_url" | cut -d '"' -f4 | grep "${platform}.zip$" | head -n1); \
+    HTTPX_URL=$(curl -s https://api.github.com/repos/projectdiscovery/httpx/releases/latest \
+        | grep "browser_download_url" | cut -d '"' -f4 \
+        | grep "${platform}.zip$" | head -n1); \
     test -n "$HTTPX_URL"; \
+    echo "Fetching httpx: $HTTPX_URL"; \
     wget -qO /tmp/httpx.zip "$HTTPX_URL"; \
     mkdir -p /tmp/httpx_extracted; \
     unzip -q /tmp/httpx.zip -d /tmp/httpx_extracted; \
@@ -294,7 +349,7 @@ RUN set -eux; \
     rm -rf /tmp/httpx_extracted /tmp/httpx.zip
 
 # ============================================================================
-# Stage 8: Create Tool Wrappers
+# Stage 8: Create Wrapper Scripts
 # ============================================================================
 RUN set -eux; \
     # JWT Tool wrapper
@@ -321,7 +376,7 @@ RUN npm install -g --cache /tmp/npm-cache agent-browser@0.26.0 && \
     agent-browser doctor --offline --quick
 
 # ============================================================================
-# Stage 10: Install Go-based Tools
+# Stage 10: Go-based Security Tools
 # ============================================================================
 RUN set -eux; \
     go install github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest && \
@@ -348,7 +403,8 @@ RUN nuclei -update-templates
 # ============================================================================
 RUN set -eux; \
     echo "=== Starting Tool Validation ===" && \
-    # Validate cleanup
+    \
+    # --- Cleanup Verification ---
     test -z "$(find /var/lib/apt/lists -mindepth 1 -print -quit)" && \
     test -z "$(find /var/cache/apt/archives -mindepth 1 -print -quit)" && \
     test ! -e /home/user/.cache/pip && \
@@ -356,87 +412,126 @@ RUN set -eux; \
     test ! -e "$GOCACHE" && \
     test ! -e "$GOPATH/pkg/mod" && \
     echo "✓ Cache cleanup verified" && \
-    # Validate sudoers
+    \
+    # --- System Configuration ---
     visudo -cf /etc/sudoers.d/hackerai-user && \
     echo "✓ sudoers configuration" && \
-    # Validate PATH
     grep -Fx 'export PATH=/home/user/.local/bin:/usr/local/go/bin:/home/user/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
         /etc/profile.d/00-hackerai-path.sh && \
     echo "✓ Login shell PATH" && \
-    # Validate core tools
-    test -d /usr/share/seclists && echo "✓ SecLists" && \
-    # Network scanning
-    which nmap && echo "✓ nmap" && \
-    which naabu && echo "✓ naabu" && \
-    which nikto && echo "✓ nikto" && \
-    # Web recon
-    which whatweb && echo "✓ whatweb" && \
-    which wafw00f && echo "✓ wafw00f" && \
-    # Web vuln scanners
-    which sqlmap && echo "✓ sqlmap" && \
-    which wapiti && echo "✓ wapiti" && \
-    which wpscan && echo "✓ wpscan" && \
-    # DNS tools
+    test -d /usr/share/seclists && \
+    echo "✓ SecLists installed" && \
+    \
+    # --- Network Scanning & Enumeration ---
+    which nmap     && echo "✓ nmap"     && \
+    which naabu    && echo "✓ naabu"    && \
+    which nikto    && echo "✓ nikto"    && \
+    which whatweb  && echo "✓ whatweb"  && \
+    which wafw00f  && echo "✓ wafw00f"  && \
+    \
+    # --- Web Vulnerability Scanners ---
+    which sqlmap   && echo "✓ sqlmap"   && \
+    which wapiti   && echo "✓ wapiti"   && \
+    which wpscan   && echo "✓ wpscan"   && \
+    \
+    # --- DNS/Subdomain ---
     which subfinder && echo "✓ subfinder" && \
-    which dnsrecon && echo "✓ dnsrecon" && \
-    which dnsenum && echo "✓ dnsenum" && \
-    which whois && echo "✓ whois" && \
-    # Fuzzing
-    which ffuf && echo "✓ ffuf" && \
-    which arjun && echo "✓ arjun" && \
-    which gobuster && echo "✓ gobuster" && \
+    which dnsrecon  && echo "✓ dnsrecon"  && \
+    which dnsenum   && echo "✓ dnsenum"   && \
+    which whois     && echo "✓ whois"     && \
+    \
+    # --- Web Fuzzing & Discovery ---
+    which ffuf      && echo "✓ ffuf"      && \
+    which arjun     && echo "✓ arjun"     && \
+    which gobuster  && echo "✓ gobuster"  && \
     which dirsearch && echo "✓ dirsearch" && \
-    # SSL
-    which testssl && echo "✓ testssl" && \
+    \
+    # --- SSL/TLS ---
+    which testssl    && echo "✓ testssl"    && \
     which testssl.sh && echo "✓ testssl.sh" && \
-    # Scanning
+    \
+    # --- Scanning & Bruteforce ---
     which nuclei && echo "✓ nuclei" && \
-    which hydra && echo "✓ hydra" && \
-    # SMB
-    which smbclient && echo "✓ smbclient" && \
-    which smbmap && echo "✓ smbmap" && \
-    which nbtscan && echo "✓ nbtscan" && \
+    which hydra  && echo "✓ hydra"  && \
+    \
+    # --- SMB/NetBIOS ---
+    which smbclient  && echo "✓ smbclient"  && \
+    which smbmap     && echo "✓ smbmap"     && \
+    which nbtscan    && echo "✓ nbtscan"    && \
     which enum4linux && echo "✓ enum4linux" && \
-    # Network
+    \
+    # --- Network Discovery ---
     which arp-scan && echo "✓ arp-scan" && \
-    # Crawling
+    \
+    # --- Web Crawling ---
     which gospider && echo "✓ gospider" && \
-    # Go tools
+    \
+    # --- Go Tools ---
     which interactsh-client && echo "✓ interactsh-client" && \
-    which katana && echo "✓ katana" && \
-    which cvemap && echo "✓ cvemap" && \
-    # Custom tools
+    which katana             && echo "✓ katana"             && \
+    which cvemap             && echo "✓ cvemap"             && \
+    \
+    # --- Custom Tools ---
     which jwt-tool && jwt-tool -h >/dev/null && echo "✓ jwt_tool" && \
     which gitdumper && echo "✓ gitdumper" && \
-    # External binaries
+    \
+    # --- External Binaries ---
     which trufflehog && echo "✓ trufflehog" && \
-    which trivy && echo "✓ trivy" && \
-    # Frameworks
-    which zaproxy && echo "✓ zaproxy" && \
-    which msfconsole && echo "✓ msfconsole" && \
-    which msfpc && echo "✓ msfpc" && \
-    # HTTP tools
+    which trivy      && echo "✓ trivy"      && \
+    \
+    # --- Security Frameworks ---
+    which zaproxy     && echo "✓ zaproxy"     && \
+    which msfconsole  && echo "✓ msfconsole"  && \
+    which msfpc       && echo "✓ msfpc"       && \
+    \
+    # --- Reverse Engineering ---
+    which r2      && echo "✓ radare2"  && \
+    which cutter  && echo "✓ cutter"   && \
+    which gdb     && echo "✓ gdb"      && \
+    which ltrace  && echo "✓ ltrace"   && \
+    which strace  && echo "✓ strace"   && \
+    which upx     && echo "✓ upx"      && \
+    which strings && echo "✓ binutils" && \
+    \
+    # --- Digital Forensics ---
+    which ts             && echo "✓ sleuthkit"      && \
+    which vol            && echo "✓ volatility3"     && \
+    which bulk-extractor && echo "✓ bulk-extractor"  && \
+    which foremost       && echo "✓ foremost"        && \
+    which scalpel        && echo "✓ scalpel"         && \
+    which dcfldd         && echo "✓ dcfldd"          && \
+    which hashdeep       && echo "✓ hashdeep"        && \
+    which tshark         && echo "✓ tshark"          && \
+    which exiftool       && echo "✓ exiftool"        && \
+    \
+    # --- HTTP Tools ---
     which httpx && echo "✓ httpx" && \
-    # Browser
-    which chromium && echo "✓ chromium" && \
+    \
+    # --- Browser Automation ---
+    which chromium      && echo "✓ chromium"      && \
     which agent-browser && echo "✓ agent-browser" && \
-    # Utilities
-    which rg && echo "✓ ripgrep" && \
-    # Languages
-    which go && echo "✓ go" && \
+    \
+    # --- System Utilities ---
+    which rg   && echo "✓ ripgrep" && \
+    which tmux && echo "✓ tmux"    && \
+    \
+    # --- Programming Languages ---
+    which go      && echo "✓ go"      && \
     which python3 && echo "✓ python3" && \
-    which node && echo "✓ node" && \
-    which ruby && echo "✓ ruby" && \
-    which tmux && echo "✓ tmux" && \
-    # Python modules
-    python3 -c "import reportlab; print('✓ reportlab')" && \
-    python3 -c "import docx; print('✓ python-docx')" && \
-    python3 -c "import openpyxl; print('✓ openpyxl')" && \
-    python3 -c "import pptx; print('✓ python-pptx')" && \
-    python3 -c "import pandas; print('✓ pandas')" && \
-    python3 -c "import odf; print('✓ odfpy')" && \
-    python3 -c "import requests; print('✓ requests')" && \
-    # Version information
+    which node    && echo "✓ node"    && \
+    which ruby    && echo "✓ ruby"    && \
+    \
+    # --- Python Modules ---
+    python3 -c "import reportlab;   print('✓ reportlab')"   && \
+    python3 -c "import docx;        print('✓ python-docx')" && \
+    python3 -c "import openpyxl;    print('✓ openpyxl')"    && \
+    python3 -c "import pptx;        print('✓ python-pptx')" && \
+    python3 -c "import pandas;      print('✓ pandas')"      && \
+    python3 -c "import odf;         print('✓ odfpy')"       && \
+    python3 -c "import requests;    print('✓ requests')"    && \
+    python3 -c "import volatility3; print('✓ volatility3')" && \
+    \
+    # --- Version Information ---
     echo "=== Version Information ===" && \
     nmap --version | head -n1 && \
     python3 --version && \
