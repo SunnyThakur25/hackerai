@@ -86,10 +86,12 @@ const renderMessageItem = ({
   mode,
   message = assistantMessage,
   status = "ready",
+  workPresentation = "inline",
 }: {
   mode: ChatMode;
   message?: ChatMessage;
   status?: ChatStatus;
+  workPresentation?: "inline" | "timeline-shell";
 }) =>
   render(
     <MessageItem
@@ -98,10 +100,12 @@ const renderMessageItem = ({
       messagesLength={1}
       lastAssistantMessageIndex={0}
       status={status}
+      canEdit={message.role === "user"}
       isHovered={false}
       isEditing={false}
       feedbackInputMessageId={null}
       mode={mode}
+      workPresentation={workPresentation}
       branchBoundaryIndex={undefined}
       onMouseEnter={jest.fn()}
       onMouseLeave={jest.fn()}
@@ -238,6 +242,92 @@ describe("MessageItem WorkedFor rendering", () => {
     expect(screen.getByText("regenerated final answer")).toBeInTheDocument();
   });
 
+  it("leaves Agent work to the virtual timeline when rendering its answer shell", () => {
+    const toolParts = Array.from({ length: 100 }, (_, index) => ({
+      type: "tool-shell",
+      input: `command ${index + 1}`,
+      state: "output-available",
+    }));
+
+    renderMessageItem({
+      mode: "agent",
+      status: "streaming",
+      message: {
+        ...assistantMessage,
+        parts: [...toolParts, { type: "text", text: "final answer" }],
+        metadata: {
+          mode: "agent",
+          generationStartedAt: Date.now(),
+        },
+      } as unknown as ChatMessage,
+      workPresentation: "timeline-shell",
+    });
+
+    expect(screen.queryByTestId("part-tool-shell")).not.toBeInTheDocument();
+    expect(screen.getByText("final answer")).toBeInTheDocument();
+  });
+
+  it("does not duplicate Agent work for a file-bearing answer shell without final text", () => {
+    renderMessageItem({
+      mode: "agent",
+      message: {
+        ...assistantMessage,
+        parts: [
+          {
+            type: "tool-shell",
+            input: "ran command",
+            state: "output-available",
+          },
+          {
+            type: "file",
+            mediaType: "text/plain",
+            name: "result.txt",
+            url: "https://example.com/result.txt",
+          },
+        ],
+        metadata: {
+          mode: "agent",
+          generationTimeMs: 1_500,
+        },
+      } as unknown as ChatMessage,
+      workPresentation: "timeline-shell",
+    });
+
+    expect(screen.queryByTestId("part-tool-shell")).not.toBeInTheDocument();
+  });
+
+  it("does not count terminal stream chunks as separate visible activity", () => {
+    const terminalChunks = Array.from({ length: 100 }, (_, index) => ({
+      type: "data-terminal",
+      data: { toolCallId: "tool-1", terminal: `chunk ${index}` },
+    }));
+
+    renderMessageItem({
+      mode: "agent",
+      status: "streaming",
+      message: {
+        ...assistantMessage,
+        parts: [
+          {
+            type: "tool-shell",
+            input: "ran command",
+            state: "input-available",
+          },
+          ...terminalChunks,
+        ],
+        metadata: {
+          mode: "agent",
+          generationStartedAt: Date.now(),
+        },
+      } as unknown as ChatMessage,
+    });
+
+    expect(screen.getAllByTestId("part-tool-shell")).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: /show earlier activity/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not show an expand icon when there are no expandable work parts", () => {
     renderMessageItem({
       mode: "agent",
@@ -316,6 +406,7 @@ describe("MessageItem WorkedFor rendering", () => {
         messagesLength={1}
         lastAssistantMessageIndex={0}
         status="ready"
+        canEdit={false}
         isHovered={false}
         isEditing={false}
         feedbackInputMessageId={null}
