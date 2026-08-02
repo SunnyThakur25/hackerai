@@ -9,7 +9,6 @@ describe("systemPrompt security instructions", () => {
       "pro",
       "ask-model",
       null,
-      false,
       null,
     );
 
@@ -29,7 +28,6 @@ describe("systemPrompt security instructions", () => {
       "pro",
       "ask-model",
       null,
-      false,
       null,
     );
     const agentPrompt = await systemPrompt(
@@ -38,7 +36,6 @@ describe("systemPrompt security instructions", () => {
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
 
@@ -58,7 +55,6 @@ describe("systemPrompt security instructions", () => {
       "pro",
       "ask-model",
       null,
-      false,
       null,
     );
     const agentPrompt = await systemPrompt(
@@ -67,7 +63,6 @@ describe("systemPrompt security instructions", () => {
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
 
@@ -106,6 +101,22 @@ describe("systemPrompt security instructions", () => {
     }
   });
 
+  it("does not invent a cutoff for the free DeepSeek routes", async () => {
+    const prompt = await systemPrompt(
+      "user_123",
+      "ask",
+      "free",
+      "ask-model-free",
+      null,
+      null,
+    );
+
+    expect(prompt).toContain(
+      "Your reliable knowledge cutoff is not specified.",
+    );
+    expect(prompt).not.toContain("undefined");
+  });
+
   it("does not claim isolated container execution for dangerous local hosts", async () => {
     const localHostContext = `You are executing commands on macOS 15.0 (arm64) in DANGEROUS MODE.
 Commands are invoked via /bin/bash -c.
@@ -120,7 +131,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       localHostContext,
     );
 
@@ -144,7 +154,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "ask-model",
       null,
-      false,
       null,
     );
 
@@ -175,7 +184,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
     const localPrompt = await systemPrompt(
@@ -184,7 +192,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       "Local sandbox context",
     );
 
@@ -227,7 +234,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "ask-model",
       null,
-      false,
       null,
     );
 
@@ -241,7 +247,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
     const localPrompt = await systemPrompt(
@@ -250,7 +255,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       "Local sandbox context",
     );
 
@@ -279,7 +283,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "ask-model",
       null,
-      false,
       null,
     );
 
@@ -293,7 +296,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
 
@@ -312,7 +314,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
     const localPrompt = await systemPrompt(
@@ -321,7 +322,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       "Local sandbox context",
     );
 
@@ -343,7 +343,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
 
@@ -364,7 +363,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
     const localPrompt = await systemPrompt(
@@ -373,7 +371,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       "Local sandbox context",
     );
     const askPrompt = await systemPrompt(
@@ -382,7 +379,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "ask-model",
       null,
-      false,
       null,
     );
 
@@ -423,7 +419,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
 
@@ -447,7 +442,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
 
@@ -464,7 +458,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
 
@@ -475,7 +468,7 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "Do not use host.docker.internal as a shortcut to the user's host from the cloud sandbox",
     );
     expect(prompt).toContain(
-      "use the HackerAI Desktop App, Remote Connection, or a user-provided reachable tunnel URL",
+      "use the HackerAI Desktop App, Remote Control, or a user-provided reachable tunnel URL",
     );
     expect(prompt).toContain(
       "Do not invent host aliases or imply the cloud sandbox can directly reach private/internal assets",
@@ -489,7 +482,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "ask-model",
       null,
-      false,
       null,
     );
 
@@ -508,15 +500,15 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "ask-model",
       null,
-      false,
       null,
     );
 
     expect(prompt).toContain("<current_mode>");
     expect(prompt).toContain("You are in ASK MODE with limited tools.");
     expect(prompt).toContain(
-      "inform them to switch to AGENT MODE for full access including file operations, terminal commands, and code execution.",
+      "AGENT MODE runs commands in the selected execution environment. Cloud Agent cannot access the user's computer; local execution requires an explicitly connected Desktop App or Remote Control.",
     );
+    expect(prompt).not.toContain("switch to AGENT MODE for full access");
   });
 
   it("adds free ask-mode local sandbox guidance", async () => {
@@ -526,19 +518,74 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "free",
       "ask-model",
       null,
-      false,
       null,
     );
 
     expect(prompt).toContain("<current_mode>");
     expect(prompt).toContain("You are in ASK MODE with limited tools.");
     expect(prompt).toContain(
-      "AGENT MODE requires a connected local sandbox on the free plan, or Pro for cloud Agent access.",
+      "AGENT MODE requires a connected local machine on the free plan, or a paid plan for isolated cloud Agent access. Switching modes alone does not connect the user's computer.",
     );
-    expect(prompt).not.toContain(
-      "inform them to switch to AGENT MODE for full access",
-    );
+    expect(prompt).not.toContain("switch to AGENT MODE for full access");
   });
+
+  it.each([
+    [
+      "free Ask",
+      "ask",
+      "free",
+      null,
+      "requires a connected local machine on the free plan, or a paid plan for isolated cloud Agent access",
+    ],
+    [
+      "paid Ask",
+      "ask",
+      "pro",
+      null,
+      "Cloud Agent cannot access the user's computer; local execution requires an explicitly connected Desktop App or Remote Control.",
+    ],
+    [
+      "cloud Agent",
+      "agent",
+      "pro",
+      null,
+      "For the default cloud sandbox, commands run in an isolated container",
+    ],
+    [
+      "local Agent",
+      "agent",
+      "pro",
+      "Local sandbox context",
+      "Local sandbox context",
+    ],
+  ] as const)(
+    "adds local-machine connection guidance once for %s",
+    async (_label, mode, subscription, sandboxContext, expectedVariant) => {
+      const prompt = await systemPrompt(
+        "user_123",
+        mode,
+        subscription,
+        mode === "ask" ? "ask-model" : "agent-model",
+        null,
+        sandboxContext,
+      );
+      const setupUrl =
+        "https://help.hackerai.co/en/articles/12961920-connecting-a-hackerai-agent-to-your-local-machine";
+
+      expect(prompt).toContain("<local_machine_access>");
+      expect(prompt).toContain(
+        "Switching to Agent Mode or upgrading does not automatically connect HackerAI to the user's computer.",
+      );
+      expect(prompt).toContain(
+        "connect it through the HackerAI Desktop App or Remote Control",
+      );
+      expect(prompt).toContain(
+        "Local Agent access is available on every plan, including Free.",
+      );
+      expect(prompt.split(setupUrl)).toHaveLength(2);
+      expect(prompt).toContain(expectedVariant);
+    },
+  );
 
   it("adds agent-mode current-mode guidance", async () => {
     const prompt = await systemPrompt(
@@ -547,7 +594,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
     );
 
@@ -567,7 +613,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
       "ask_approval",
     );
@@ -591,7 +636,6 @@ Commands run directly on the host OS "workstation" without Docker isolation. Be 
       "pro",
       "agent-model",
       null,
-      false,
       null,
       "full_access",
     );
@@ -611,7 +655,6 @@ Commands run directly on the host OS "labbox" without Docker isolation.`;
       "pro",
       "agent-model",
       null,
-      false,
       localHostContext,
     );
 

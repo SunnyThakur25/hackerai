@@ -17,7 +17,7 @@ const {
 const { ChatSDKError } = require("../../errors");
 const { phLogger } = require("../../posthog/server");
 describe("captureToolCalls", () => {
-  it("aggregates repeated tool calls by tool before sending PostHog events", () => {
+  it("aggregates all tool calls into one anonymous PostHog event", () => {
     const capture = jest.fn();
     const posthog = { capture };
     const chatLogger = {
@@ -36,23 +36,17 @@ describe("captureToolCalls", () => {
       mode: "agent",
     });
 
-    expect(capture).toHaveBeenCalledTimes(2);
+    expect(capture).toHaveBeenCalledTimes(1);
     expect(capture).toHaveBeenCalledWith({
       distinctId: "user_123",
       event: "hackerai-tool_usage",
       properties: {
         mode: "agent",
-        toolName: "run_terminal_cmd",
-        count: 3,
-      },
-    });
-    expect(capture).toHaveBeenCalledWith({
-      distinctId: "user_123",
-      event: "hackerai-tool_usage",
-      properties: {
-        mode: "agent",
-        toolName: "open_url",
-        count: 1,
+        toolCountsByName: JSON.stringify({ run_terminal_cmd: 3, open_url: 1 }),
+        totalCount: 4,
+        distinctToolCount: 2,
+        tool_usage_event_version: 2,
+        $process_person_profile: false,
       },
     });
   });
@@ -159,56 +153,6 @@ describe("captureAgentRun", () => {
     );
   });
 
-  it("adds content-free completion signals to the existing run event", () => {
-    const capture = jest.fn();
-
-    captureAgentRun({
-      posthog: { capture } as any,
-      userId: "user_123",
-      mode: "agent",
-      subscription: "pro",
-      sandboxInfo: null,
-      outcome: "success",
-      selectedModel: "agent-model",
-      configuredModelId: "x-ai/grok-4.5",
-      finishReason: "stop",
-      isAutoContinue: false,
-      completionSignals: {
-        version: 1,
-        naturalStop: true,
-        stepCount: 12,
-        todoTotalCount: 3,
-        todoPendingCount: 1,
-        todoInProgressCount: 1,
-        hasUnfinishedTodos: true,
-        handledToolFailureCount: 1,
-        sdkToolErrorCount: 0,
-        hasToolFailure: true,
-        recentToolFailure: true,
-        stepsSinceLastToolFailure: 1,
-      },
-    });
-
-    expect(capture.mock.calls[0][0].properties).toEqual(
-      expect.objectContaining({
-        finish_reason: "stop",
-        is_auto_continue: false,
-        completion_signal_version: 1,
-        natural_stop: true,
-        agent_step_count: 12,
-        todo_total_count: 3,
-        todo_pending_count: 1,
-        todo_in_progress_count: 1,
-        has_unfinished_todos: true,
-        handled_tool_failure_count: 1,
-        sdk_tool_error_count: 0,
-        has_tool_failure: true,
-        recent_tool_failure: true,
-        steps_since_last_tool_failure: 1,
-      }),
-    );
-  });
-
   it("attributes a served fallback without inferring it from model names", () => {
     const capture = jest.fn();
 
@@ -220,7 +164,7 @@ describe("captureAgentRun", () => {
       sandboxInfo: { type: "e2b" },
       outcome: "success",
       selectedModel: "agent-model-free",
-      configuredModelId: "deepseek/deepseek-v4-flash",
+      configuredModelId: "deepseek/deepseek-v4-flash-0731",
       responseModel: "x-ai/grok-4.5",
       fallbackServed: true,
     });
@@ -230,7 +174,7 @@ describe("captureAgentRun", () => {
       event: "hackerai-agent_run",
       properties: expect.objectContaining({
         selected_model: "agent-model-free",
-        configured_model: "deepseek/deepseek-v4-flash",
+        configured_model: "deepseek/deepseek-v4-flash-0731",
         response_model: "x-ai/grok-4.5",
         fallback_served: true,
       }),
@@ -357,8 +301,8 @@ describe("captureAgentCompletionAnalytics", () => {
       outcome: "success",
       chatLogger: { getToolCalls: () => [{ name: "web_search" }] } as any,
       selectedModel: "agent-model-free",
-      configuredModelId: "deepseek/deepseek-v4-flash",
-      responseModel: "deepseek/deepseek-v4-flash",
+      configuredModelId: "deepseek/deepseek-v4-flash-0731",
+      responseModel: "deepseek/deepseek-v4-flash-0731",
       fallbackServed: false,
     });
 
@@ -372,8 +316,8 @@ describe("captureAgentCompletionAnalytics", () => {
         subscription_tier: "free",
         outcome: "success",
         selected_model: "agent-model-free",
-        configured_model: "deepseek/deepseek-v4-flash",
-        response_model: "deepseek/deepseek-v4-flash",
+        configured_model: "deepseek/deepseek-v4-flash-0731",
+        response_model: "deepseek/deepseek-v4-flash-0731",
         fallback_served: false,
         sandbox_type: "e2b",
       },
@@ -747,7 +691,7 @@ describe("createChatLogger provider stream termination", () => {
       chatLogger.recordProviderError(err, {
         mode: "ask",
         model: "ask-model-free",
-        requestedModelSlug: "deepseek/deepseek-v4-flash",
+        requestedModelSlug: "deepseek/deepseek-v4-flash-0731",
       });
       chatLogger.emitUnexpectedError(err);
 
@@ -761,7 +705,7 @@ describe("createChatLogger provider stream termination", () => {
       expect(errorOutput).toContain('"provider_name":"Anthropic Vertex"');
       expect(errorOutput).toContain('"configured_model":"ask-model-free"');
       expect(errorOutput).toContain(
-        '"requested_model_slug":"deepseek/deepseek-v4-flash"',
+        '"requested_model_slug":"deepseek/deepseek-v4-flash-0731"',
       );
       expect(phErrorSpy).toHaveBeenCalledWith(
         "Provider content blocked",
@@ -771,7 +715,7 @@ describe("createChatLogger provider stream termination", () => {
           provider_name: "Anthropic Vertex",
           provider_name_source: "openrouter_error_metadata",
           configured_model: "ask-model-free",
-          requested_model_slug: "deepseek/deepseek-v4-flash",
+          requested_model_slug: "deepseek/deepseek-v4-flash-0731",
           model_provider_slug: "deepseek",
           openrouter_generation_id: "gen-content-blocked",
         }),
@@ -787,7 +731,7 @@ describe("createChatLogger provider stream termination", () => {
         provider_name: "Anthropic Vertex",
         provider_name_source: "openrouter_error_metadata",
         configured_model: "ask-model-free",
-        requested_model_slug: "deepseek/deepseek-v4-flash",
+        requested_model_slug: "deepseek/deepseek-v4-flash-0731",
         model_provider_slug: "deepseek",
         openrouter_generation_id: "gen-content-blocked",
       });
@@ -1063,12 +1007,12 @@ describe("createChatLogger provider stream termination", () => {
       chatLogger.recordProviderError(err, {
         mode: "ask",
         model: "ask-model-free",
-        requestedModelSlug: "deepseek/deepseek-v4-flash",
+        requestedModelSlug: "deepseek/deepseek-v4-flash-0731",
       });
       chatLogger.emitUnexpectedError(err);
 
       const expectedFingerprint =
-        "provider_error|provider_5xx|status_502|provider_fireworks|model_deepseek/deepseek-v4-flash";
+        "provider_error|provider_5xx|status_502|provider_fireworks|model_deepseek/deepseek-v4-flash-0731";
       const structuredErrorLog = errorSpy.mock.calls
         .map((call) => call[0])
         .find(
@@ -1298,7 +1242,6 @@ describe("createChatLogger ChatSDKError metadata", () => {
       });
       chatLogger.setRequestDetails({
         mode: "agent",
-        isTemporary: false,
         isRegenerate: false,
       });
       chatLogger.setUser({ id: "user_123", subscription: "pro" });
@@ -1377,7 +1320,6 @@ describe("createChatLogger ChatSDKError metadata", () => {
       });
       chatLogger.setRequestDetails({
         mode: "agent",
-        isTemporary: false,
         isRegenerate: false,
       });
       chatLogger.setUser({ id: "user_123", subscription: "ultra" });
@@ -1427,7 +1369,6 @@ describe("createChatLogger ChatSDKError metadata", () => {
       });
       chatLogger.setRequestDetails({
         mode: "agent",
-        isTemporary: false,
         isRegenerate: false,
       });
       chatLogger.setUser({ id: "user_123", subscription: "pro" });
@@ -1476,7 +1417,6 @@ describe("createChatLogger OpenRouter metadata", () => {
       });
       chatLogger.setRequestDetails({
         mode: "agent",
-        isTemporary: false,
         isRegenerate: false,
       });
       chatLogger.setUser({ id: "user_123", subscription: "ultra" });
@@ -1533,7 +1473,6 @@ describe("createChatLogger OpenRouter metadata", () => {
       });
       chatLogger.setRequestDetails({
         mode: "ask",
-        isTemporary: false,
         isRegenerate: false,
       });
       chatLogger.setUser({ id: "user_123", subscription: "pro" });

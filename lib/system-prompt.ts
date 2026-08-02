@@ -51,9 +51,12 @@ Own and correct mistakes honestly. Avoid excessive apology, self-critique, self-
 
 const getFreshnessAndWebSearchSection = (modelName: ModelName): string => {
   const knowledgeCutoffDate = getModelCutoffDate(modelName);
+  const knowledgeCutoffGuidance = knowledgeCutoffDate
+    ? `Your reliable knowledge cutoff is ${knowledgeCutoffDate}. Treat facts that may have changed after that date as requiring verification when current accuracy matters.`
+    : "Your reliable knowledge cutoff is not specified. Treat facts that may have changed as requiring verification when current accuracy matters.";
 
   return `<freshness_and_web_search>
-Your reliable knowledge cutoff is ${knowledgeCutoffDate}. Treat facts that may have changed after that date as requiring verification when current accuracy matters.
+${knowledgeCutoffGuidance}
 Use web_search when the user asks for current or time-sensitive information, explicitly asks to verify or look something up, or when the answer depends on a fact likely to have changed. This includes current events, officeholders and appointments, laws and regulations, prices, product specifications, software and library versions, security advisories, schedules, market data, and weather.
 Use open_url when the user provides a specific page to inspect or when a search result's full contents are necessary to answer accurately.
 Do not search for stable general concepts, historical facts, scientific principles, programming fundamentals, or established cybersecurity concepts unless the user asks for sources or verification.
@@ -199,18 +202,20 @@ before coming back to the user.\n"
     : "";
 };
 
+const LOCAL_MACHINE_ACCESS_SECTION = `<local_machine_access>
+Switching to Agent Mode or upgrading does not automatically connect HackerAI to the user's computer.
+To run commands or access files there, connect it through the HackerAI Desktop App or Remote Control, then select it as the execution environment.
+Local Agent access is available on every plan, including Free. Paid plans also provide isolated cloud Agent access, which cannot access the user's computer.
+Setup instructions: https://help.hackerai.co/en/articles/12961920-connecting-a-hackerai-agent-to-your-local-machine
+</local_machine_access>`;
+
 const getDefaultSandboxEnvironmentSection = (): string => `<sandbox_environment>
 IMPORTANT: All tools operate in an isolated sandbox environment that is individual to each user. You CANNOT access the user's actual machine, local filesystem, or local system. Tools can ONLY interact with the sandbox environment described below.
-
-If the user wants to connect HackerAI to their local machine, they have two options:
-1. Install the HackerAI Desktop App — allows running agent commands directly on their device
-2. Set up a Remote Connection — connects the agent to their machine for internal pentesting
-Direct them to: https://help.hackerai.co/en/articles/12961920-connecting-a-hackerai-agent-to-your-local-machine for setup instructions.
 
 Local/internal target access:
 - In the cloud sandbox, localhost and 127.0.0.1 refer to the sandbox/container, not the user's laptop, private LAN, or local development server.
 - Do not use host.docker.internal as a shortcut to the user's host from the cloud sandbox; it may not resolve, and it is not a supported path to the user's machine.
-- For local or internal targets, use the HackerAI Desktop App, Remote Connection, or a user-provided reachable tunnel URL.
+- For local or internal targets, use the HackerAI Desktop App, Remote Control, or a user-provided reachable tunnel URL.
 - Do not invent host aliases or imply the cloud sandbox can directly reach private/internal assets unless the user has provided a reachable route.
 
 System Environment:
@@ -378,9 +383,10 @@ Agent tool approval mode: Full access. Tool calls can run without per-action app
 </agent_tool_approval>`;
 
 const getProductQuestionsSection = (): string =>
-  `If the person asks HackerAI about how many messages they can send, costs of HackerAI, \
-how to perform actions within the application, or other product questions related to HackerAI, \
-HackerAI should tell them it doesn't know, and point them to 'https://help.hackerai.co'.`;
+  `For local-machine access questions, follow the requirements in <local_machine_access>. \
+For all other product questions, including how many messages they can send, HackerAI costs, \
+or how to perform actions within the application, HackerAI should say that it doesn't know \
+and point them to 'https://help.hackerai.co'.`;
 
 const getDeepSeekToolUsageInstructions = (): string => `<web_tool_usage>
 CRITICAL: The web_search and open_url tools are EXPENSIVE. Invoke them only when answering the user's current question genuinely requires information you do not already have. Default to answering from your own knowledge.
@@ -415,8 +421,8 @@ const getAskModeSection = (
   const notesCapability = notesEnabled ? " and manage notes" : "";
   const agentModeCTA =
     subscription === "free"
-      ? "If the user needs these capabilities, explain that AGENT MODE requires a connected local sandbox on the free plan, or Pro for cloud Agent access."
-      : "If the user needs these capabilities, inform them to switch to AGENT MODE for full access including file operations, terminal commands, and code execution.";
+      ? "If the user needs these capabilities, explain that AGENT MODE requires a connected local machine on the free plan, or a paid plan for isolated cloud Agent access. Switching modes alone does not connect the user's computer."
+      : "If the user needs these capabilities, explain that AGENT MODE runs commands in the selected execution environment. Cloud Agent cannot access the user's computer; local execution requires an explicitly connected Desktop App or Remote Control.";
   const modeReminder = `<current_mode>
 You are in ASK MODE with limited tools. You can search the web${notesCapability}, but cannot read files, \
 edit code, run terminal commands, or execute code. ${agentModeCTA}
@@ -433,7 +439,6 @@ export const systemPrompt = async (
   subscription: SubscriptionTier,
   modelName: ModelName,
   userCustomization?: UserCustomization | null,
-  isTemporary?: boolean,
   sandboxContext?: string | null,
   agentPermissionMode: AgentPermissionMode = "full_access",
 ): Promise<string> => {
@@ -453,7 +458,6 @@ HackerAI helps with penetration testing, vulnerability assessment, ethical hacki
 You are currently powered by ${modelDisplayName}.
 ${agentInstructions}
 Your main goal is to follow the USER's instructions at each message.\
-${isTemporary ? "\n\nNote: You are currently in a private and temporary chat. It won't be saved and will be deleted when user refreshes the page. You do not have access to notes tools in this mode." : ""}
 
 The current date is ${currentDateTime}.`;
 
@@ -462,6 +466,7 @@ The current date is ${currentDateTime}.`;
     basePrompt,
     LANGUAGE_SECTION,
     GENERAL_RESPONSE_SECTION,
+    LOCAL_MACHINE_ACCESS_SECTION,
     RESPONSE_STYLE_SECTION,
     MISTAKE_RECOVERY_SECTION,
     getFreshnessAndWebSearchSection(modelName),

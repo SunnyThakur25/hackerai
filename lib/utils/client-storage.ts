@@ -16,11 +16,13 @@ export type ConversationDraft = {
 
 export type ConversationDraftAttachment = {
   kind: "file" | "pasted-text";
-  fileId: string;
+  storage?: "s3" | "local-desktop";
+  fileId?: string;
   name: string;
   mediaType: string;
   size: number;
   generatedSource?: "pasted-text";
+  generatedTextAttachmentId?: string;
   tokens?: number;
   timestamp: number;
 };
@@ -33,12 +35,99 @@ export type ConversationDraftStore = {
 export const CONVERSATION_DRAFTS_STORAGE_KEY = "conversation_drafts";
 export const NULL_THREAD_DRAFT_ID = "null_thread";
 export const CHAT_MODE_STORAGE_KEY = "chat_mode";
+export const SIDEBAR_OPEN_PROJECT_IDS_STORAGE_KEY =
+  "hackerai:sidebar:open-projects:v1";
 const DRAFT_ATTACHMENT_RESTORE_TTL_MS = 24 * 60 * 60 * 1000;
 const HAS_AUTHENTICATED_BEFORE_STORAGE_KEY = "hackerai_has_authed_before";
 const SELECTED_MODEL_STORAGE_KEY = "selected_model";
 const AGENT_PERMISSION_MODE_STORAGE_KEY = "agent_permission_mode";
+const EMPTY_SIDEBAR_OPEN_PROJECT_IDS_SNAPSHOT = "[]";
+const openSidebarProjectIdsListeners = new Set<() => void>();
+let openSidebarProjectIdsMemorySnapshot =
+  EMPTY_SIDEBAR_OPEN_PROJECT_IDS_SNAPSHOT;
 
 const isBrowser = (): boolean => typeof window !== "undefined";
+
+export const parseOpenSidebarProjectIdsSnapshot = (raw: string): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return Array.from(
+      new Set(
+        parsed.filter(
+          (projectId): projectId is string =>
+            typeof projectId === "string" && projectId.length > 0,
+        ),
+      ),
+    );
+  } catch {
+    return [];
+  }
+};
+
+export const getOpenSidebarProjectIdsSnapshot = (): string => {
+  if (!isBrowser()) return EMPTY_SIDEBAR_OPEN_PROJECT_IDS_SNAPSHOT;
+  try {
+    return (
+      window.localStorage.getItem(SIDEBAR_OPEN_PROJECT_IDS_STORAGE_KEY) ??
+      EMPTY_SIDEBAR_OPEN_PROJECT_IDS_SNAPSHOT
+    );
+  } catch {
+    return openSidebarProjectIdsMemorySnapshot;
+  }
+};
+
+export const getServerOpenSidebarProjectIdsSnapshot = (): string =>
+  EMPTY_SIDEBAR_OPEN_PROJECT_IDS_SNAPSHOT;
+
+export const subscribeOpenSidebarProjectIds = (
+  onStoreChange: () => void,
+): (() => void) => {
+  if (!isBrowser()) return () => undefined;
+
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === SIDEBAR_OPEN_PROJECT_IDS_STORAGE_KEY) onStoreChange();
+  };
+
+  openSidebarProjectIdsListeners.add(onStoreChange);
+  window.addEventListener("storage", handleStorage);
+
+  return () => {
+    openSidebarProjectIdsListeners.delete(onStoreChange);
+    window.removeEventListener("storage", handleStorage);
+  };
+};
+
+export const readOpenSidebarProjectIds = (): string[] =>
+  parseOpenSidebarProjectIdsSnapshot(getOpenSidebarProjectIdsSnapshot());
+
+export const writeOpenSidebarProjectIds = (
+  projectIds: Iterable<string>,
+): void => {
+  if (!isBrowser()) return;
+  try {
+    const uniqueProjectIds = Array.from(
+      new Set(
+        Array.from(projectIds).filter((projectId) => projectId.length > 0),
+      ),
+    );
+    openSidebarProjectIdsMemorySnapshot = JSON.stringify(uniqueProjectIds);
+
+    if (uniqueProjectIds.length === 0) {
+      window.localStorage.removeItem(SIDEBAR_OPEN_PROJECT_IDS_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(
+        SIDEBAR_OPEN_PROJECT_IDS_STORAGE_KEY,
+        openSidebarProjectIdsMemorySnapshot,
+      );
+    }
+  } catch {
+    // Browser storage can be disabled or unavailable.
+  }
+
+  openSidebarProjectIdsListeners.forEach((listener) => listener());
+};
 
 export const readDraftStore = (): ConversationDraftStore => {
   if (!isBrowser()) return { drafts: [] };
@@ -203,27 +292,67 @@ const normalizeDraftAttachments = (
   if (!Array.isArray(attachments)) return [];
   const cutoff = Date.now() - DRAFT_ATTACHMENT_RESTORE_TTL_MS;
 
-  return attachments.filter(
-    (attachment): attachment is ConversationDraftAttachment => {
-      if (!attachment || typeof attachment !== "object") return false;
-      const value = attachment as Partial<ConversationDraftAttachment>;
-      const validKind = value.kind === "file" || value.kind === "pasted-text";
+  return attachments.flatMap((attachment) => {
+    if (!attachment || typeof attachment !== "object") return [];
+    const value = attachment as Partial<ConversationDraftAttachment>;
+    const kind = value.kind;
+    const validKind = kind === "file" || kind === "pasted-text";
+    const storage = value.storage === "local-desktop" ? "local-desktop" : "s3";
+    const hasFileId =
+      typeof value.fileId === "string" && value.fileId.length > 0;
+    const hasGeneratedTextAttachmentId =
+      typeof value.generatedTextAttachmentId === "string" &&
+      value.generatedTextAttachmentId.length > 0;
 
-      return (
-        validKind &&
-        (typeof value.generatedSource === "undefined" ||
-          value.generatedSource === "pasted-text") &&
-        typeof value.fileId === "string" &&
-        value.fileId.length > 0 &&
-        typeof value.name === "string" &&
-        value.name.length > 0 &&
-        typeof value.mediaType === "string" &&
-        typeof value.size === "number" &&
-        typeof value.timestamp === "number" &&
-        value.timestamp > cutoff
-      );
-    },
-  );
+    if (
+      !validKind ||
+      (typeof value.generatedSource !== "undefined" &&
+        value.generatedSource !== "pasted-text") ||
+      (storage === "s3" && !hasFileId) ||
+      (storage === "local-desktop" &&
+        (kind !== "pasted-text" || !hasGeneratedTextAttachmentId)) ||
+      typeof value.name !== "string" ||
+      value.name.length === 0 ||
+      typeof value.mediaType !== "string" ||
+      typeof value.size !== "number" ||
+      typeof value.timestamp !== "number" ||
+      value.timestamp <= cutoff
+    ) {
+      return [];
+    }
+
+    const normalized: ConversationDraftAttachment = {
+      kind,
+      name: value.name,
+      mediaType: value.mediaType,
+      size: value.size,
+      timestamp: value.timestamp,
+    };
+
+    if (storage === "local-desktop") {
+      normalized.storage = "local-desktop";
+    }
+
+    if (hasFileId) {
+      normalized.fileId = value.fileId;
+    }
+
+    if (typeof value.tokens === "number") {
+      normalized.tokens = value.tokens;
+    }
+
+    if (value.generatedSource === "pasted-text") {
+      normalized.generatedSource = "pasted-text";
+    }
+
+    if (kind === "pasted-text") {
+      if (typeof value.generatedTextAttachmentId === "string") {
+        normalized.generatedTextAttachmentId = value.generatedTextAttachmentId;
+      }
+    }
+
+    return [normalized];
+  });
 };
 
 export const getDraftAttachmentsById = (

@@ -29,7 +29,6 @@ import {
   PAID_FUNNEL_EVENTS,
   paidFunnelProperties,
 } from "@/lib/analytics/paid-funnel";
-import type { AgentCompletionSignals } from "@/lib/analytics/agent-completion-signals";
 import type { AnalyticsRequestContext } from "@/lib/analytics/request-context";
 import { extraUsagePointsToDollars } from "@/convex/lib/extraUsagePricing";
 import type { UsageCostRecord } from "@/lib/usage-tracker";
@@ -73,7 +72,6 @@ export interface ChatLoggerConfig {
 
 export interface RequestDetails {
   mode: ChatMode;
-  isTemporary: boolean;
   isRegenerate: boolean;
 }
 
@@ -194,7 +192,6 @@ const COMPACT_CHAT_ERROR_METADATA_KEYS = [
   "processing_input_other_part_count",
   "processing_input_regenerate",
   "processing_input_auto_continue",
-  "processing_input_temporary",
   "processing_input_sandbox_preference",
   "capReason",
   "limitType",
@@ -701,7 +698,6 @@ export function createChatLogger(config: ChatLoggerConfig) {
         fallbackModelSlugs?: string[];
         userId?: string;
         subscription?: string;
-        isTemporary?: boolean;
         providerRequest?: ProviderRequestDiagnostics;
       },
     ) {
@@ -1105,8 +1101,8 @@ export function captureAgentBudgetAbort({
 
 /**
  * Capture aggregated tool usage to PostHog at end of request.
- * One event is emitted per tool to keep analytics useful while
- * avoiding the cost of one PostHog event per individual tool call.
+ * One event is emitted per request with a JSON tool-count map so exact tool
+ * totals remain queryable without one billable event per tool.
  */
 export function captureToolCalls({
   posthog,
@@ -1137,17 +1133,21 @@ export function captureToolCalls({
     aggregatedToolCalls.set(tool.name, { name: tool.name, count: 1 });
   }
 
-  for (const tool of aggregatedToolCalls.values()) {
-    posthog.capture({
-      distinctId: userId,
-      event: "hackerai-tool_usage",
-      properties: {
-        mode,
-        toolName: tool.name,
-        count: tool.count,
-      },
-    });
-  }
+  const tools = Array.from(aggregatedToolCalls.values());
+  posthog.capture({
+    distinctId: userId,
+    event: "hackerai-tool_usage",
+    properties: {
+      mode,
+      toolCountsByName: JSON.stringify(
+        Object.fromEntries(tools.map((tool) => [tool.name, tool.count])),
+      ),
+      totalCount: toolCalls.length,
+      distinctToolCount: tools.length,
+      tool_usage_event_version: 2,
+      $process_person_profile: false,
+    },
+  });
 }
 
 export type AgentRunOutcome = "success" | "aborted" | "error";
@@ -1177,8 +1177,6 @@ type AgentCompletionAnalyticsArgs = {
   activeModelStreamDurationMs?: number;
   activeTerminalWaitDurationMs?: number;
   activeSandboxRecoveryDurationMs?: number;
-  isAutoContinue?: boolean;
-  completionSignals?: AgentCompletionSignals;
 };
 
 export function captureAgentRun({
@@ -1203,8 +1201,6 @@ export function captureAgentRun({
   activeModelStreamDurationMs,
   activeTerminalWaitDurationMs,
   activeSandboxRecoveryDurationMs,
-  isAutoContinue,
-  completionSignals,
 }: {
   posthog: PostHog | null;
   userId: string;
@@ -1227,8 +1223,6 @@ export function captureAgentRun({
   activeModelStreamDurationMs?: number;
   activeTerminalWaitDurationMs?: number;
   activeSandboxRecoveryDurationMs?: number;
-  isAutoContinue?: boolean;
-  completionSignals?: AgentCompletionSignals;
 }) {
   if (!posthog || mode !== "agent") return;
   posthog.capture({
@@ -1266,9 +1260,6 @@ export function captureAgentRun({
       ...(activeSandboxRecoveryDurationMs !== undefined && {
         active_sandbox_recovery_duration_ms: activeSandboxRecoveryDurationMs,
       }),
-      ...(isAutoContinue !== undefined && {
-        is_auto_continue: isAutoContinue,
-      }),
       ...(responseModel && { response_model: responseModel }),
       ...(responseModel &&
         fallbackServed !== undefined && { fallback_served: fallbackServed }),
@@ -1276,23 +1267,6 @@ export function captureAgentRun({
         sandbox_type: sandboxInfo.type,
       }),
       ...(finishReason && { finish_reason: finishReason }),
-      ...(completionSignals && {
-        completion_signal_version: completionSignals.version,
-        natural_stop: completionSignals.naturalStop,
-        agent_step_count: completionSignals.stepCount,
-        todo_total_count: completionSignals.todoTotalCount,
-        todo_pending_count: completionSignals.todoPendingCount,
-        todo_in_progress_count: completionSignals.todoInProgressCount,
-        has_unfinished_todos: completionSignals.hasUnfinishedTodos,
-        handled_tool_failure_count: completionSignals.handledToolFailureCount,
-        sdk_tool_error_count: completionSignals.sdkToolErrorCount,
-        has_tool_failure: completionSignals.hasToolFailure,
-        recent_tool_failure: completionSignals.recentToolFailure,
-        ...(completionSignals.stepsSinceLastToolFailure !== undefined && {
-          steps_since_last_tool_failure:
-            completionSignals.stepsSinceLastToolFailure,
-        }),
-      }),
       ...(budgetAbortDetails && {
         budget_abort_cap_reason: budgetAbortDetails.capReason,
         budget_abort_billing_stop_reason: budgetAbortDetails.billingStopReason,
@@ -1328,8 +1302,6 @@ export function captureAgentCompletionAnalytics(
     activeModelStreamDurationMs: args.activeModelStreamDurationMs,
     activeTerminalWaitDurationMs: args.activeTerminalWaitDurationMs,
     activeSandboxRecoveryDurationMs: args.activeSandboxRecoveryDurationMs,
-    isAutoContinue: args.isAutoContinue,
-    completionSignals: args.completionSignals,
   });
 }
 

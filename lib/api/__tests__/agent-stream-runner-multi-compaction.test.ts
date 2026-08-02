@@ -125,13 +125,11 @@ const createTestStreamContext = (
   userId: "user",
   subscription: "pro",
   chatId: "chat",
-  temporary: false,
   fileTokens: {},
   noteInjectionOpts: {
     userId: "user",
     subscription: "pro",
     shouldIncludeNotes: false,
-    isTemporary: false,
   },
   systemPromptTokens: 100,
   ctxSystemTokens: 100,
@@ -263,7 +261,7 @@ describe("retry served-model telemetry", () => {
 
   it("clears prior served-model state before a retry can abort without metadata", () => {
     const state = {
-      responseModel: "deepseek/deepseek-v4-flash",
+      responseModel: "deepseek/deepseek-v4-flash-0731",
       fallbackServed: false,
     };
 

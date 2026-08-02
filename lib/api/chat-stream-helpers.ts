@@ -676,6 +676,8 @@ export function getFallbackSlugs(
 
 const OPENROUTER_RESPONSE_MODEL_COST_KEYS: Record<string, ModelName> = {
   "anthropic/claude-opus-4.6": "model-opus-4.6",
+  "deepseek/deepseek-v4-flash-0731": "agent-model-free",
+  "deepseek/deepseek-v4-flash-20260731": "agent-model-free",
   "x-ai/grok-4.5": "model-grok-4.5",
   "z-ai/glm-5.2": "model-glm-5.2",
   "z-ai/glm-5.2-20260616": "model-glm-5.2",
@@ -859,10 +861,9 @@ export async function injectNotesIntoMessages(
     userId: string;
     subscription: SubscriptionTier;
     shouldIncludeNotes: boolean;
-    isTemporary?: boolean;
   },
 ): Promise<UIMessage[]> {
-  if (!opts.shouldIncludeNotes || opts.isTemporary) return messages;
+  if (!opts.shouldIncludeNotes) return messages;
 
   try {
     const notes = await getNotes({
@@ -928,10 +929,9 @@ export async function refreshNotesInModelMessages(
     userId: string;
     subscription: SubscriptionTier;
     shouldIncludeNotes: boolean;
-    isTemporary?: boolean;
   },
 ): Promise<Array<Record<string, unknown>>> {
-  if (!opts.shouldIncludeNotes || opts.isTemporary) return messages;
+  if (!opts.shouldIncludeNotes) return messages;
 
   try {
     const notes = await getNotes({
@@ -1035,7 +1035,6 @@ export async function applyPrepareStepReminders(
       userId: string;
       subscription: SubscriptionTier;
       shouldIncludeNotes: boolean;
-      isTemporary?: boolean;
     };
   },
 ): Promise<Array<Record<string, unknown>>> {
@@ -1081,18 +1080,22 @@ export function assertFreeAgentGates(args: {
 }
 
 /**
- * Temporary chats are a paid-plan feature. Enforce this at the API boundary so
- * free users cannot bypass the client-side entitlement check.
+ * Paid plans are Agent-only. Enforce this at the API boundary so stale clients
+ * and direct requests cannot restore the removed paid Ask path.
  */
-export function assertTemporaryChatAccess(args: {
-  isTemporary: boolean;
+export function assertChatModeAccess(args: {
+  mode: unknown;
   subscription: SubscriptionTier;
 }): void {
-  if (!args.isTemporary || args.subscription !== "free") return;
+  if (args.mode !== "ask" && args.mode !== "agent") {
+    throw new ChatSDKError("bad_request:api", "Invalid chat mode.");
+  }
+
+  if (args.mode !== "ask" || args.subscription === "free") return;
 
   throw new ChatSDKError(
     "forbidden:chat",
-    "Temporary chats are available on paid plans. Upgrade to Pro to use this feature.",
+    "Paid plans use Agent mode. Ask mode is only available on the free plan.",
   );
 }
 
@@ -1200,7 +1203,6 @@ export async function estimatePreflightInputTokens(args: {
   userId: string;
   selectedModel: ModelName;
   userCustomization: UserCustomization | null | undefined;
-  temporary: boolean | undefined;
   truncatedMessages: UIMessage[];
 }): Promise<number> {
   const {
@@ -1209,7 +1211,6 @@ export async function estimatePreflightInputTokens(args: {
     userId,
     selectedModel,
     userCustomization,
-    temporary,
     truncatedMessages,
   } = args;
   if (!isAgentMode(mode) && subscription === "free") return 0;
@@ -1221,7 +1222,6 @@ export async function estimatePreflightInputTokens(args: {
     subscription,
     selectedModel,
     userCustomization,
-    temporary,
     null,
   );
   const systemTokens = safeCountTokens(estimatedSystemPrompt);
